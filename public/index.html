@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="/manifest.json"><link rel="icon" href="/icon.svg">
+<title>Chat Anónimo</title>
+<style>
+:root{--bg:#0f1115;--card:#1a1d24;--txt:#f2f3f5;--mut:#8b90a0;--acc:#7c5cff}
+@media(prefers-color-scheme:light){:root{--bg:#f4f5f8;--card:#fff;--txt:#14161b;--mut:#6b7080}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--txt);font:16px system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.screen{display:none;height:100%;flex-direction:column}.screen.on{display:flex}
+#join{align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center}
+#join h1{margin:0;font-size:1.6rem}
+input,button{font:inherit;border-radius:12px;border:0}
+input{background:var(--card);color:var(--txt);padding:14px;outline:2px solid transparent}
+input{border:2px solid var(--mut)}
+input::placeholder{color:var(--mut);opacity:1;letter-spacing:.05em}
+input:focus{border-color:var(--acc);outline:none}
+.lbl{color:var(--mut);font-size:.9rem;margin:0}
+.hint{color:var(--mut);font-size:.8rem;max-width:320px;margin:0}
+button.lnk{background:transparent;color:var(--acc);padding:6px;font-weight:500}
+button{background:var(--acc);color:#fff;padding:14px 20px;font-weight:600;cursor:pointer}
+#code{width:min(320px,100%);text-align:center;font-size:1.5rem;letter-spacing:.15em;text-transform:uppercase}
+#join button{width:min(320px,100%)}
+button.alt{background:transparent;color:var(--acc);outline:2px solid var(--acc)}
+.or{color:var(--mut);font-size:.85rem;margin:0}
+header div{display:flex;gap:4px;align-items:center}
+header #share{color:var(--acc)}
+#err{color:#ff6b6b;min-height:1.2em;margin:0}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--card)}
+header b{letter-spacing:.1em}header button{background:transparent;color:var(--mut);padding:6px 10px}
+#log{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+.m{background:var(--card);padding:10px 14px;border-radius:14px;max-width:85%;word-wrap:break-word;white-space:pre-wrap;align-self:flex-start}
+.m span{color:var(--mut)}
+form{display:flex;gap:8px;padding:12px;background:var(--card)}
+form input{flex:1;background:var(--bg)}
+</style></head><body>
+<section id="join" class="screen on">
+  <h1>💬 Chat Anónimo</h1>
+  <p class="lbl">Escribe el código de la sala</p>
+  <input id="code" type="text" placeholder="Ej: AMIGOS24" maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false">
+  <button id="go">Unirse</button>
+  <p class="or">— o —</p>
+  <button id="new" class="alt">Crear sala nueva</button>
+  <button id="inst" class="lnk" style="display:none">📲 Instalar app</button>
+  <button id="rnd" class="lnk">🎲 Generar código aleatorio</button>
+  <p class="hint">Para entrar a una sala necesitas su código: solo funciona si alguien ya la creó. Para crear la tuya, escribe el código que quieras (4 a 24 letras o números) y toca «Crear sala nueva», o déjalo vacío para uno aleatorio.</p>
+  <p id="err"></p>
+</section>
+<section id="chat" class="screen">
+  <header><b id="rc"></b><div><button id="share">Compartir código</button><button id="leave">Salir</button></div></header>
+  <div id="log"></div>
+  <form id="f"><input id="txt" placeholder="Escribe un mensaje…" maxlength="500" autocomplete="off"><button>Enviar</button></form>
+</section>
+<script>
+const $ = id => document.getElementById(id);
+let room = '', ctrl = null, welcome = false;
+const norm = v => v.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+const show = id => { $('join').classList.toggle('on', id === 'join'); $('chat').classList.toggle('on', id === 'chat'); };
+
+function add(text, sys) {
+  const d = document.createElement('div'); d.className = 'm';
+  if (sys) d.innerHTML = '<span></span>', d.firstChild.textContent = text;
+  else d.innerHTML = '<span>Mensaje: </span><i></i>', d.lastChild.textContent = text;
+  const l = $('log'); l.appendChild(d); l.scrollTop = l.scrollHeight;
+}
+
+async function join(auto, create) {
+  const code = norm(typeof auto === 'string' ? auto : $('code').value);
+  if (code.length < 4) { $('err').textContent = 'El código debe tener al menos 4 caracteres.'; return; }
+  $('err').textContent = '';
+  ctrl = new AbortController();
+  try {
+    const r = await fetch('/join', { method: 'POST', body: JSON.stringify({ room: code, create: !!create }), signal: ctrl.signal, cache: 'no-store' });
+    if (r.status === 404) return fail(room ? 'La sala se cerró.' : 'Esa sala no existe. Pide el código a quien la creó.');
+    if (r.status === 409) return fail('Ese código ya está en uso. Elige otro.');
+    if (!r.ok) throw new Error('http ' + r.status);
+    room = code; $('rc').textContent = code; $('log').innerHTML = ''; show('chat'); $('txt').focus(); if (welcome) { welcome = false; add('Sala creada. Toca "Compartir código" y envíaselo a quien quieras invitar.', true); }
+    const rd = r.body.getReader(), dec = new TextDecoder(); let buf = '';
+    for (;;) {
+      const { done, value } = await rd.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i; while ((i = buf.indexOf('\n\n')) >= 0) {
+        const ev = buf.slice(0, i); buf = buf.slice(i + 2);
+        if (ev.startsWith('data: ')) try { add(JSON.parse(ev.slice(6)).t); } catch {}
+      }
+    }
+    if (room) { add('Conexión perdida. Reconectando…', true); setTimeout(() => room && join(room), 2000); }
+  } catch (e) {
+    welcome = welcome && !!room; if (e.name === 'AbortError') return;
+    if (!room) $('err').textContent = location.protocol === 'file:' ? 'Abriste el archivo directamente. Ejecuta «node server.js» y abre http://localhost:3000' : 'No se pudo conectar al servidor. ¿Está corriendo «node server.js»?';
+    else setTimeout(() => room && join(room), 2000);
+  }
+}
+function fail(m) { room = ''; welcome = false; show('join'); $('err').textContent = m; }
+function leave() { const c = ctrl; room = ''; c && c.abort(); $('code').value = ''; show('join'); }
+
+$('go').onclick = () => join();
+function newCode() { // 6 caracteres aleatorios, sin letras confusas (0/O, 1/I)
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', b = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(b, x => A[x % A.length]).join('');
+}
+$('new').onclick = () => {
+  const typed = norm($('code').value);
+  if ($('code').value.trim() && typed.length < 4) { $('err').textContent = 'Tu código debe tener al menos 4 letras o números.'; return; }
+  const c = typed || newCode(); $('code').value = c;
+  welcome = true; join(c, true);
+};
+$('rnd').onclick = () => { $('code').value = newCode(); $('err').textContent = ''; $('code').focus(); };
+$('share').onclick = async () => {
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+  if (local) add('Aviso: estás en localhost y tus amigos no pueden abrir ese enlace. Publica la app en internet y comparte su dirección.', true);
+  const msg = 'Únete a mi chat anónimo.\nCódigo: ' + room + (local ? '' : '\nApp: ' + location.origin);
+  try {
+    if (navigator.share) await navigator.share({ text: msg });
+    else { await navigator.clipboard.writeText(msg); add('Código copiado. Pégalo en un chat para invitar.', true); }
+  } catch (e) { if (e.name !== 'AbortError') add('Tu código es: ' + room, true); }
+};
+$('code').addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
+$('leave').onclick = leave;
+$('f').onsubmit = e => {
+  e.preventDefault();
+  const t = $('txt').value.trim(); if (!t) return;
+  $('txt').value = '';
+  fetch('/send', { method: 'POST', body: JSON.stringify({ room, text: t }), cache: 'no-store' }).catch(() => add('No se pudo enviar.', true));
+};
+let dp; addEventListener('beforeinstallprompt', e => { e.preventDefault(); dp = e; $('inst').style.display = 'inline-block'; });
+$('inst').onclick = async () => { if (!dp) return; dp.prompt(); await dp.userChoice; dp = null; $('inst').style.display = 'none'; };
+if (location.protocol === 'file:') $('err').textContent = 'Ejecuta «node server.js» y abre http://localhost:3000 (no el archivo directo).';
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('/sw.js');
+</script></body></html>
