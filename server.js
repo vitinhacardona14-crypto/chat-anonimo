@@ -1,6 +1,7 @@
 // Servidor de chat anónimo. Sin dependencias: solo Node.js 16+.
 // No guarda mensajes, no lee ni registra IPs, no usa cookies, no hace logs de peticiones.
-const http = require('http'), fs = require('fs'), path = require('path');
+// Todo (texto, imágenes, encuestas, votos, reacciones) solo se retransmite a los conectados: el servidor no lo almacena.
+const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 const PORT = process.env.PORT || 3000;
 const PUB = path.join(__dirname, 'public');
 const GRACIA = 30 * 60 * 1000; // una sala vacía sigue existiendo 30 min (para que los amigos lleguen)
@@ -8,19 +9,59 @@ const rooms = new Map();       // codigo -> { conns:Set<res>, timer }  (solo en 
 const TYPES = { '.html':'text/html; charset=utf-8', '.json':'application/json', '.js':'text/javascript', '.svg':'image/svg+xml' };
 const clean = c => String(c || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 24);
 
-function body(req) {
+const MAX_IMG = 1200000;   // caracteres máx. de la imagen (base64) ≈ 900 KB
+const MAX_BODY = 1500000;  // tamaño máx. de una petición /send
+const IMG = /^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+const ID = /^[a-f0-9]{1,16}$/, UID = /^[a-z0-9]{6,16}$/i;
+const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const str = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+const newId = () => crypto.randomBytes(5).toString('hex');
+
+function body(req, max) {
   return new Promise(ok => {
     let d = '';
-    req.on('data', c => { d += c; if (d.length > 4000) req.destroy(); });
+    req.setEncoding('utf8');
+    req.on('data', c => { d += c; if (d.length > max) req.destroy(); });
     req.on('end', () => { try { ok(JSON.parse(d)); } catch { ok({}); } });
+    req.on('close', () => ok({}));
   });
+}
+
+// Valida y limpia un evento. Devuelve null si no es válido.
+function evento(b) {
+  const k = b.k || 'm';
+  if (k === 'm') {
+    const t = str(b.t != null ? b.t : b.text, 500);
+    const i = typeof b.i === 'string' && b.i.length <= MAX_IMG && IMG.test(b.i) ? b.i : '';
+    if (!t && !i) return null;
+    const ev = { k: 'm', id: newId(), t };
+    if (i) ev.i = i;
+    if (b.q && typeof b.q.id === 'string' && ID.test(b.q.id)) ev.q = { id: b.q.id, s: str(b.q.s, 80) };
+    return ev;
+  }
+  if (k === 'p') {
+    const q = str(b.q, 200);
+    const o = Array.isArray(b.o) ? b.o.map(x => str(x, 100)).filter(Boolean).slice(0, 6) : [];
+    if (!q || o.length < 2) return null;
+    return { k: 'p', id: newId(), q, o };
+  }
+  if (k === 'v') {
+    const n = Number.isInteger(b.n) ? b.n : -2;
+    if (typeof b.id !== 'string' || !ID.test(b.id) || typeof b.u !== 'string' || !UID.test(b.u) || n < -1 || n > 5) return null;
+    return { k: 'v', id: b.id, u: b.u, n };
+  }
+  if (k === 'r') {
+    if (typeof b.id !== 'string' || !ID.test(b.id) || typeof b.u !== 'string' || !UID.test(b.u) || !EMOJIS.includes(b.e)) return null;
+    return { k: 'r', id: b.id, u: b.u, e: b.e, on: !!b.on };
+  }
+  return null;
 }
 
 http.createServer(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'POST' && req.url === '/join') {
-    const b = await body(req), code = clean(b.room);
+    const b = await body(req, 4000), code = clean(b.room);
     if (code.length < 4) { res.writeHead(400).end(); return; }
     const existe = rooms.has(code);
     if (b.create && existe) { res.writeHead(409).end(); return; }   // código ya usado: no se puede "crear" encima
@@ -43,10 +84,10 @@ http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && req.url === '/send') {
-    const b = await body(req), room = rooms.get(clean(b.room));
-    const text = String(b.text || '').trim().slice(0, 500);
-    if (room && text) {
-      const msg = `data: ${JSON.stringify({ t: text })}\n\n`; // solo el texto, nada más
+    const b = await body(req, MAX_BODY), room = rooms.get(clean(b.room));
+    const ev = room && evento(b);
+    if (ev) {
+      const msg = `data: ${JSON.stringify(ev)}\n\n`; // solo el contenido, sin autor ni hora
       for (const r of room.conns) r.write(msg);
     }
     res.writeHead(204).end(); return;
