@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="/manifest.json"><link rel="icon" href="/icon.svg">
+<title>Chat Anónimo</title>
+<style>
+:root{--bg:#0f1115;--card:#1a1d24;--txt:#f2f3f5;--mut:#8b90a0;--acc:#7c5cff}
+@media(prefers-color-scheme:light){:root{--bg:#f4f5f8;--card:#fff;--txt:#14161b;--mut:#6b7080}}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--txt);font:16px system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.screen{display:none;height:100%;flex-direction:column}.screen.on{display:flex}
+#join{align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center}
+#join h1{margin:0;font-size:1.6rem}
+input,button{font:inherit;border-radius:12px;border:0}
+input{background:var(--card);color:var(--txt);padding:14px;outline:2px solid transparent}
+input{border:2px solid var(--mut)}
+input::placeholder{color:var(--mut);opacity:1;letter-spacing:.05em}
+input:focus{border-color:var(--acc);outline:none}
+.lbl{color:var(--mut);font-size:.9rem;margin:0}
+.hint{color:var(--mut);font-size:.8rem;max-width:320px;margin:0}
+button.lnk{background:transparent;color:var(--acc);padding:6px;font-weight:500}
+button{background:var(--acc);color:#fff;padding:14px 20px;font-weight:600;cursor:pointer}
+#code{width:min(320px,100%);text-align:center;font-size:1.5rem;letter-spacing:.15em;text-transform:uppercase}
+#join button{width:min(320px,100%)}
+button.alt{background:transparent;color:var(--acc);outline:2px solid var(--acc)}
+.or{color:var(--mut);font-size:.85rem;margin:0}
+header div{display:flex;gap:4px;align-items:center}
+header #share{color:var(--acc)}
+#err{color:#ff6b6b;min-height:1.2em;margin:0}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--card)}
+header b{letter-spacing:.1em}header button{background:transparent;color:var(--mut);padding:6px 10px}
+#log{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+.m{background:var(--card);padding:10px 14px;border-radius:14px;max-width:85%;word-wrap:break-word;white-space:pre-wrap;align-self:flex-start}
+.m span{color:var(--mut)}
+form{display:flex;gap:8px;padding:12px;background:var(--card)}
+form input{flex:1;background:var(--bg)}
+
+/* --- Nuevo: imágenes, respuestas, reacciones, encuestas --- */
+.m.msg{cursor:pointer;transition:background .3s}
+.m.sel{outline:2px solid var(--acc)}
+.m.flash{background:rgba(124,92,255,.35)}
+.m img{display:block;max-width:100%;max-height:320px;border-radius:10px;margin-bottom:4px;cursor:zoom-in}
+.q{white-space:normal;border-left:3px solid var(--acc);background:rgba(124,92,255,.12);border-radius:6px;padding:4px 8px;margin-bottom:6px;font-size:.85rem;color:var(--mut);cursor:pointer}
+.rx{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}.rx:empty{display:none}
+.chip{background:var(--bg);color:var(--txt);padding:2px 9px;font-size:.85rem;font-weight:500;border-radius:999px}
+.chip.me{outline:2px solid var(--acc)}
+#menu,#rbar,#tools{display:flex;align-items:center;gap:4px;padding:6px 12px;background:var(--card);border-top:1px solid var(--bg)}
+#menu button{background:transparent;color:var(--txt);padding:4px 8px;font-size:1.4rem}
+#menu #rep{margin-left:auto;font-size:.95rem;color:var(--acc);font-weight:600}
+#menu #mx{font-size:1rem;color:var(--mut)}
+#rbar{justify-content:space-between;gap:8px}
+#rtxt{flex:1;min-width:0;border-left:3px solid var(--acc);padding-left:8px;color:var(--mut);font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#rbar button{background:transparent;color:var(--mut);padding:4px 10px}
+#tools{border-top:0;padding-bottom:0}
+#tools button{background:transparent;color:var(--acc);padding:6px 10px;font-weight:500;font-size:.9rem}
+.poll{white-space:normal;min-width:min(260px,100%)}
+.poll .pt{color:var(--mut);font-size:.8rem}
+.poll .pq{font-weight:600;margin:2px 0 8px}
+.opt{position:relative;overflow:hidden;display:flex;justify-content:space-between;gap:8px;width:100%;margin-bottom:6px;background:var(--bg);color:var(--txt);padding:10px 12px;font-weight:500;text-align:left}
+.opt .bar{position:absolute;left:0;top:0;bottom:0;width:0;background:rgba(124,92,255,.3);transition:width .3s}
+.opt .ot,.opt .oc{position:relative}
+.opt.me{outline:2px solid var(--acc)}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}
+.modal .box{background:var(--card);border-radius:16px;padding:18px;width:min(380px,100%);display:flex;flex-direction:column;gap:10px;max-height:100%;overflow-y:auto}
+.modal h2{margin:0;font-size:1.2rem}
+.modal .row{display:flex;gap:8px}.modal .row button{flex:1}
+#view img{max-width:100%;max-height:100%;border-radius:8px}
+</style></head><body>
+<section id="join" class="screen on">
+  <h1>💬 Chat Anónimo</h1>
+  <p class="lbl">Escribe el código de la sala</p>
+  <input id="code" type="text" placeholder="Ej: AMIGOS24" maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false">
+  <button id="go">Unirse</button>
+  <p class="or">— o —</p>
+  <button id="new" class="alt">Crear sala nueva</button>
+  <button id="inst" class="lnk" style="display:none">📲 Instalar app</button>
+  <button id="rnd" class="lnk">🎲 Generar código aleatorio</button>
+  <p class="hint">Para entrar a una sala necesitas su código: solo funciona si alguien ya la creó. Para crear la tuya, escribe el código que quieras (4 a 24 letras o números) y toca «Crear sala nueva», o déjalo vacío para uno aleatorio.</p>
+  <p id="err"></p>
+</section>
+<section id="chat" class="screen">
+  <header><b id="rc"></b><div><button id="share">Compartir código</button><button id="leave">Salir</button></div></header>
+  <div id="log"></div>
+  <div id="menu" hidden><span id="emo"></span><button id="rep" type="button">↩ Responder</button><button id="mx" type="button">✕</button></div>
+  <div id="rbar" hidden><span id="rtxt"></span><button id="rcancel" type="button">✕</button></div>
+  <div id="tools"><button id="img" type="button">📷 Imagen</button><button id="pollb" type="button">📊 Encuesta</button></div>
+  <form id="f"><input id="txt" placeholder="Escribe un mensaje…" maxlength="500" autocomplete="off"><button>Enviar</button></form>
+  <input id="file" type="file" accept="image/*" hidden>
+</section>
+
+<div id="pm" class="modal" hidden>
+  <div class="box">
+    <h2>📊 Nueva encuesta</h2>
+    <input id="pq" placeholder="Pregunta" maxlength="200" autocomplete="off">
+    <div id="po" style="display:flex;flex-direction:column;gap:8px"></div>
+    <button id="padd" type="button" class="lnk">+ Agregar opción</button>
+    <p id="perr" class="lbl" style="color:#ff6b6b;min-height:1.1em"></p>
+    <div class="row"><button id="pcancel" type="button" class="alt">Cancelar</button><button id="pok" type="button">Crear</button></div>
+  </div>
+</div>
+<div id="view" class="modal" hidden><img alt=""></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let room = '', ctrl = null, welcome = false;
+const norm = v => v.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+const show = id => { $('join').classList.toggle('on', id === 'join'); $('chat').classList.toggle('on', id === 'chat'); };
+
+// Identificador aleatorio solo en memoria (no se guarda): sirve para que cada persona tenga 1 voto y sus propias reacciones.
+const me = Array.from(crypto.getRandomValues(new Uint8Array(6)), x => x.toString(16).padStart(2, '0')).join('');
+const EMO = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const OKIMG = /^data:image\/(jpeg|png|webp|gif);base64,/;
+let polls = {}, votes = {}, reacts = {}, replyTo = null, sel = null;
+
+function add(text, sys) {
+  const d = document.createElement('div'); d.className = 'm';
+  if (sys) d.innerHTML = '<span></span>', d.firstChild.textContent = text;
+  else d.innerHTML = '<span>Mensaje: </span><i></i>', d.lastChild.textContent = text;
+  const l = $('log'); l.appendChild(d); l.scrollTop = l.scrollHeight;
+}
+
+/* ---------- Mensajes, imágenes, encuestas ---------- */
+const snip = ev => ev.k === 'p' ? '📊 ' + ev.q : (ev.i ? '📷 ' : '') + (ev.t || (ev.i ? 'Imagen' : ''));
+
+function bubble(ev) {
+  const d = document.createElement('div'); d.className = 'm msg'; d.id = 'm' + ev.id; d.dataset.id = ev.id; d.dataset.s = snip(ev).slice(0, 80);
+  if (ev.q) {
+    const q = document.createElement('div'); q.className = 'q'; q.textContent = '↩ ' + (ev.q.s || 'Mensaje');
+    q.onclick = () => { const t = $('m' + ev.q.id); if (t) { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); t.classList.add('flash'); setTimeout(() => t.classList.remove('flash'), 1200); } };
+    d.appendChild(q);
+  }
+  if (ev.k === 'p') {
+    d.classList.add('poll');
+    const t = document.createElement('div'); t.className = 'pt'; t.textContent = '📊 Encuesta';
+    const q = document.createElement('div'); q.className = 'pq'; q.textContent = ev.q;
+    d.append(t, q);
+    ev.o.forEach((o, i) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'opt';
+      b.innerHTML = '<i class="bar"></i><span class="ot"></span><b class="oc"></b>';
+      b.querySelector('.ot').textContent = o;
+      b.onclick = () => { const mine = (votes[ev.id] || {})[me]; send({ k: 'v', id: ev.id, u: me, n: mine === i ? -1 : i }); };
+      d.appendChild(b);
+    });
+  } else {
+    if (ev.i && OKIMG.test(ev.i)) {
+      const im = document.createElement('img'); im.src = ev.i; im.alt = 'Imagen';
+      im.onclick = () => { $('view').firstChild.src = ev.i; $('view').hidden = false; };
+      d.appendChild(im);
+    }
+    if (ev.t) { const s = document.createElement('span'); s.textContent = 'Mensaje: '; const i = document.createElement('i'); i.textContent = ev.t; d.append(s, i); }
+  }
+  const rx = document.createElement('div'); rx.className = 'rx'; d.appendChild(rx);
+  const l = $('log'); l.appendChild(d); l.scrollTop = l.scrollHeight;
+  if (ev.k === 'p') renderPoll(ev.id); renderReacts(ev.id);
+}
+
+function renderPoll(id) {
+  const d = $('m' + id), p = polls[id]; if (!d || !p) return;
+  const v = votes[id] || {}, n = p.o.map(() => 0);
+  for (const u in v) if (v[u] >= 0 && v[u] < n.length) n[v[u]]++;
+  const tot = n.reduce((a, b) => a + b, 0);
+  d.querySelectorAll('.opt').forEach((b, i) => {
+    b.querySelector('.bar').style.width = (tot ? n[i] / tot * 100 : 0) + '%';
+    b.querySelector('.oc').textContent = n[i] || '';
+    b.classList.toggle('me', v[me] === i);
+  });
+}
+
+function renderReacts(id) {
+  const d = $('m' + id); if (!d) return;
+  const rx = d.querySelector('.rx'); rx.innerHTML = '';
+  const r = reacts[id] || {};
+  EMO.forEach(e => {
+    const s = r[e]; if (!s || !s.size) return;
+    const c = document.createElement('button'); c.type = 'button'; c.className = 'chip' + (s.has(me) ? ' me' : '');
+    c.textContent = e + ' ' + s.size; c.onclick = () => toggleReact(id, e);
+    rx.appendChild(c);
+  });
+}
+
+function handle(ev) {
+  if (ev.k === 'm') bubble(ev);
+  else if (ev.k === 'p') { polls[ev.id] = ev; bubble(ev); }
+  else if (ev.k === 'v') { (votes[ev.id] ||= {})[ev.u] = ev.n; renderPoll(ev.id); }
+  else if (ev.k === 'r') {
+    const s = ((reacts[ev.id] ||= {})[ev.e] ||= new Set());
+    ev.on ? s.add(ev.u) : s.delete(ev.u); renderReacts(ev.id);
+  } else if (ev.t) add(ev.t);
+}
+
+const send = o => fetch('/send', { method: 'POST', body: JSON.stringify({ room, ...o }), cache: 'no-store' }).catch(() => add('No se pudo enviar.', true));
+const toggleReact = (id, e) => send({ k: 'r', id, u: me, e, on: !((reacts[id] || {})[e] || new Set()).has(me) });
+
+/* ---------- Tocar un mensaje: reaccionar / responder ---------- */
+function hideMenu() { if (sel) sel.classList.remove('sel'); sel = null; $('menu').hidden = true; }
+$('log').onclick = e => {
+  if (e.target.closest('.opt,.chip,.q,img')) return;
+  const m = e.target.closest('.msg');
+  if (!m || m === sel) return hideMenu();
+  hideMenu(); sel = m; m.classList.add('sel'); $('menu').hidden = false;
+};
+EMO.forEach(e => { const b = document.createElement('button'); b.type = 'button'; b.textContent = e; b.onclick = () => { if (sel) { toggleReact(sel.dataset.id, e); hideMenu(); } }; $('emo').appendChild(b); });
+$('mx').onclick = hideMenu;
+$('rep').onclick = () => {
+  if (!sel) return;
+  replyTo = { id: sel.dataset.id, s: sel.dataset.s };
+  $('rtxt').textContent = '↩ ' + replyTo.s; $('rbar').hidden = false; hideMenu(); $('txt').focus();
+};
+function clearReply() { replyTo = null; $('rbar').hidden = true; }
+$('rcancel').onclick = clearReply;
+function resetState() { polls = {}; votes = {}; reacts = {}; hideMenu(); clearReply(); }
+
+/* ---------- Entrar / salir ---------- */
+async function join(auto, create) {
+  const code = norm(typeof auto === 'string' ? auto : $('code').value);
+  if (code.length < 4) { $('err').textContent = 'El código debe tener al menos 4 caracteres.'; return; }
+  $('err').textContent = '';
+  ctrl = new AbortController();
+  try {
+    const r = await fetch('/join', { method: 'POST', body: JSON.stringify({ room: code, create: !!create }), signal: ctrl.signal, cache: 'no-store' });
+    if (r.status === 404) return fail(room ? 'La sala se cerró.' : 'Esa sala no existe. Pide el código a quien la creó.');
+    if (r.status === 409) return fail('Ese código ya está en uso. Elige otro.');
+    if (!r.ok) throw new Error('http ' + r.status);
+    room = code; $('rc').textContent = code; $('log').innerHTML = ''; resetState(); show('chat'); $('txt').focus(); if (welcome) { welcome = false; add('Sala creada. Toca "Compartir código" y envíaselo a quien quieras invitar.', true); }
+    const rd = r.body.getReader(), dec = new TextDecoder(); let buf = '';
+    for (;;) {
+      const { done, value } = await rd.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i; while ((i = buf.indexOf('\n\n')) >= 0) {
+        const ev = buf.slice(0, i); buf = buf.slice(i + 2);
+        if (ev.startsWith('data: ')) try { handle(JSON.parse(ev.slice(6))); } catch {}
+      }
+    }
+    if (room) { add('Conexión perdida. Reconectando…', true); setTimeout(() => room && join(room), 2000); }
+  } catch (e) {
+    welcome = welcome && !!room; if (e.name === 'AbortError') return;
+    if (!room) $('err').textContent = location.protocol === 'file:' ? 'Abriste el archivo directamente. Ejecuta «node server.js» y abre http://localhost:3000' : 'No se pudo conectar al servidor. ¿Está corriendo «node server.js»?';
+    else setTimeout(() => room && join(room), 2000);
+  }
+}
+function fail(m) { room = ''; welcome = false; show('join'); $('err').textContent = m; }
+function leave() { const c = ctrl; room = ''; c && c.abort(); $('code').value = ''; resetState(); show('join'); }
+
+$('go').onclick = () => join();
+function newCode() { // 6 caracteres aleatorios, sin letras confusas (0/O, 1/I)
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', b = crypto.getRandomValues(new Uint8Array(8));
+  return Array.from(b, x => A[x % A.length]).join('');
+}
+$('new').onclick = () => {
+  const typed = norm($('code').value);
+  if ($('code').value.trim() && typed.length < 4) { $('err').textContent = 'Tu código debe tener al menos 4 letras o números.'; return; }
+  const c = typed || newCode(); $('code').value = c;
+  welcome = true; join(c, true);
+};
+$('rnd').onclick = () => { $('code').value = newCode(); $('err').textContent = ''; $('code').focus(); };
+$('share').onclick = async () => {
+  const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+  if (local) add('Aviso: estás en localhost y tus amigos no pueden abrir ese enlace. Publica la app en internet y comparte su dirección.', true);
+  const msg = 'Únete a mi chat anónimo.\nCódigo: ' + room + (local ? '' : '\nApp: ' + location.origin);
+  try {
+    if (navigator.share) await navigator.share({ text: msg });
+    else { await navigator.clipboard.writeText(msg); add('Código copiado. Pégalo en un chat para invitar.', true); }
+  } catch (e) { if (e.name !== 'AbortError') add('Tu código es: ' + room, true); }
+};
+$('code').addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
+$('leave').onclick = leave;
+$('f').onsubmit = e => {
+  e.preventDefault();
+  const t = $('txt').value.trim(); if (!t) return;
+  $('txt').value = '';
+  send({ k: 'm', t, q: replyTo || undefined }); clearReply();
+};
+
+/* ---------- Imágenes ---------- */
+// Se reduce y se reconvierte a JPEG en el propio dispositivo (también elimina datos EXIF como la ubicación).
+async function shrink(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+    const c = document.createElement('canvas'), x = c.getContext('2d');
+    let max = 1280, q = .82;
+    for (let n = 0; n < 6; n++) {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      c.width = Math.max(1, Math.round(img.width * s)); c.height = Math.max(1, Math.round(img.height * s));
+      x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+      const out = c.toDataURL('image/jpeg', q);
+      if (out.length <= 1100000) return out;
+      max *= .75; q = Math.max(.5, q - .08);
+    }
+    return null;
+  } finally { URL.revokeObjectURL(url); }
+}
+$('img').onclick = () => $('file').click();
+$('file').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f || !room) return;
+  let data = null;
+  try { data = await shrink(f); } catch {}
+  if (!data) { add('No se pudo leer esa imagen o es demasiado grande.', true); return; }
+  const t = $('txt').value.trim(); $('txt').value = '';
+  send({ k: 'm', t, i: data, q: replyTo || undefined }); clearReply();
+};
+$('view').onclick = () => { $('view').hidden = true; $('view').firstChild.src = ''; };
+
+/* ---------- Encuestas ---------- */
+function optInput() { const i = document.createElement('input'); i.maxLength = 100; i.autocomplete = 'off'; i.placeholder = 'Opción ' + ($('po').children.length + 1); $('po').appendChild(i); }
+$('pollb').onclick = () => { $('pq').value = ''; $('po').innerHTML = ''; $('perr').textContent = ''; optInput(); optInput(); $('pm').hidden = false; $('pq').focus(); };
+$('padd').onclick = () => { if ($('po').children.length < 6) optInput(); };
+$('pcancel').onclick = () => { $('pm').hidden = true; };
+$('pok').onclick = () => {
+  const q = $('pq').value.trim(), o = [...$('po').children].map(i => i.value.trim()).filter(Boolean);
+  if (!q) { $('perr').textContent = 'Escribe la pregunta.'; return; }
+  if (o.length < 2) { $('perr').textContent = 'Pon al menos 2 opciones.'; return; }
+  send({ k: 'p', q, o, qr: undefined }); $('pm').hidden = true;
+};
+
+let dp; addEventListener('beforeinstallprompt', e => { e.preventDefault(); dp = e; $('inst').style.display = 'inline-block'; });
+$('inst').onclick = async () => { if (!dp) return; dp.prompt(); await dp.userChoice; dp = null; $('inst').style.display = 'none'; };
+if (location.protocol === 'file:') $('err').textContent = 'Ejecuta «node server.js» y abre http://localhost:3000 (no el archivo directo).';
+if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('/sw.js');
+</script></body></html>
